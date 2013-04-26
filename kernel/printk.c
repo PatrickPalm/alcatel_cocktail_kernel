@@ -44,11 +44,6 @@
 #include <mach/msm_rtb.h>
 #include <asm/uaccess.h>
 
-//for save kernel panic info to /data/
-#ifdef CONFIG_KERNEL_PANIC_LOG
-extern void copy_to_dumpbuffer(char*);
-extern int dump_enabled(void);
-#endif
 /*
  * Architectures can override it:
  */
@@ -370,8 +365,10 @@ static int check_syslog_permissions(int type, bool from_file)
 			return 0;
 		/* For historical reasons, accept CAP_SYS_ADMIN too, with a warning */
 		if (capable(CAP_SYS_ADMIN)) {
-			WARN_ONCE(1, "Attempt to access syslog with CAP_SYS_ADMIN "
-				 "but no CAP_SYSLOG (deprecated).\n");
+			printk_once(KERN_WARNING "%s (%d): "
+				 "Attempt to access syslog with CAP_SYS_ADMIN "
+				 "but no CAP_SYSLOG (deprecated).\n",
+				 current->comm, task_pid_nr(current));
 			return 0;
 		}
 		return -EPERM;
@@ -683,8 +680,19 @@ static void call_console_drivers(unsigned start, unsigned end)
 	start_print = start;
 	while (cur_index != end) {
 		if (msg_level < 0 && ((end - cur_index) > 2)) {
+			/*
+			 * prepare buf_prefix, as a contiguous array,
+			 * to be processed by log_prefix function
+			 */
+			char buf_prefix[SYSLOG_PRI_MAX_LENGTH+1];
+			unsigned i;
+			for (i = 0; i < ((end - cur_index)) && (i < SYSLOG_PRI_MAX_LENGTH); i++) {
+				buf_prefix[i] = LOG_BUF(cur_index + i);
+			}
+			buf_prefix[i] = '\0'; /* force '\0' as last string character */
+
 			/* strip log prefix */
-			cur_index += log_prefix(&LOG_BUF(cur_index), &msg_level, NULL);
+			cur_index += log_prefix((const char *)&buf_prefix, &msg_level, NULL);
 			start_print = cur_index;
 		}
 		while (cur_index != end) {
@@ -789,10 +797,6 @@ asmlinkage int printk(const char *fmt, ...)
 {
 	va_list args;
 	int r;
-#ifdef CONFIG_KERNEL_PANIC_LOG
-	static char buf[1024];
-	va_list args_1;
-#endif	
 #ifdef CONFIG_MSM_RTB
 	void *caller = __builtin_return_address(0);
 
@@ -810,16 +814,6 @@ asmlinkage int printk(const char *fmt, ...)
 	va_start(args, fmt);
 	r = vprintk(fmt, args);
 	va_end(args);
-//for save kernel panic info to /data/
-#ifdef CONFIG_KERNEL_PANIC_LOG
-	if ( dump_enabled()){
-                va_start(args_1, fmt);
-                vsnprintf(buf, sizeof(buf), fmt, args_1);
-                va_end(args_1);
-
-                copy_to_dumpbuffer(buf);
-        }
-#endif
 
 	return r;
 }

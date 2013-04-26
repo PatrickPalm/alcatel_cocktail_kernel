@@ -12,6 +12,7 @@
 #ifdef CONFIG_DEBUG_FS
 #include "mddi_ry002z.h"
 #endif
+#include "mdp4.h"
 
 static struct pwm_device *bl_pwm;
 
@@ -653,6 +654,12 @@ int mddi_himax_workround_enable(void)
 EXPORT_SYMBOL(mddi_himax_workround_enable);
 #endif
 
+void mddi_enable_high_clk(uint32 enable)
+{
+	if(lcdid == LCDID_TRULY || lcdid == LCDID_TDT)
+		mdp4_mddi_high_clk = enable;
+}
+EXPORT_SYMBOL(mddi_enable_high_clk);
 static void pmic_set_lcd_intensity(int level)
 {
 	int ret;
@@ -689,6 +696,7 @@ static void mddi_ry002z_lcd_set_backlight(struct msm_fb_data_type *mfd)
 
 static int mddi_ry002z_lcd_on(struct platform_device *pdev)
 {
+	mddi_enable_high_clk(1);
 	mddi_ry002z_lcd_ic_init();
 
 #ifdef CONFIG_DEBUG_FS
@@ -714,6 +722,7 @@ static int mddi_ry002z_lcd_off(struct platform_device *pdev)
 	lcd_driver_state.display_on = 0;
 	lcd_driver_state.is_sleep = 1;
 #endif
+	mddi_enable_high_clk(0);	
 	pr_info("%s\n", __func__);
 
 	return 0;
@@ -795,8 +804,10 @@ static int __init mddi_ry002z_init(void)
 	MSM_FB_SINGLE_MODE_PANEL(pinfo);
 	if((lcdid == LCDID_TRULY) ||(lcdid == LCDID_TDT))
 		pinfo->bpp = 24;
+	else if(lcdid == LCDID_SEIKO)
+		pinfo->bpp = 16;
 	else
-		pinfo->bpp = 18;
+		pinfo->bpp =16;
 	pinfo->type = MDDI_PANEL;
 	pinfo->wait_cycle = 0;
 	pinfo->pdest = DISPLAY_1;
@@ -818,9 +829,16 @@ static int __init mddi_ry002z_init(void)
        
 	if ((lcdid == LCDID_TRULY) ||(lcdid == LCDID_TDT)) {
 		pinfo->lcd.vsync_enable = TRUE;//Prevent tearing
-		pinfo->lcd.refx100 = 6100;//adjust for tearing
+		pinfo->lcd.refx100 = 6640;//adjust for tearing,6579
 		pinfo->lcd.v_back_porch = 12;
 		pinfo->lcd.v_front_porch = 12;
+		pinfo->lcd.v_pulse_width = 4;
+	}
+	else if(lcdid == LCDID_SEIKO){
+		pinfo->lcd.vsync_enable = TRUE;
+		pinfo->lcd.refx100 = 6400;//6330
+		pinfo->lcd.v_back_porch = 12;
+		pinfo->lcd.v_front_porch = 5;
 		pinfo->lcd.v_pulse_width = 4;
 	}
 	else {

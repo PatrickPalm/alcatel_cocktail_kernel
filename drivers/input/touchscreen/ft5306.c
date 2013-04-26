@@ -825,6 +825,41 @@ static int fts_ctpm_fw_upgrade_with_i_file(void)
 
 	return i_ret;
 }
+static int fts_ctpm_auto_clb(void)
+{
+    unsigned char uc_temp[1];
+    unsigned char i ;
+
+    printk("[FTS] start auto CLB.\n");
+    msleep(200);
+    fts_register_write(0, 0x40);  
+    mdelay(100);   //make sure already enter factory mode
+    fts_register_write(2, 0x4);  //write command to start calibration
+    mdelay(300);
+    for(i=0;i<100;i++)
+    {
+        //read_reg(0,uc_temp);
+        ft5306_i2c_read_value(this_client, 0, uc_temp, 1);
+        if ( ((uc_temp[0]&0x70)>>4) == 0x0)  //return to normal mode,calibration finish
+        {
+            break;
+        }
+        mdelay(200);
+        printk("[FTS] waiting calibration %d\n",i);
+        
+    }
+    printk("[FTS] calibration OK.\n");
+    
+    msleep(300);
+    fts_register_write(0, 0x40);  //goto factory mode
+    mdelay(100);   //make sure already enter factory mode
+    fts_register_write(2, 0x5);  //store CLB result
+    mdelay(300);
+    fts_register_write(0, 0x0); //return to normal mode 
+    msleep(300);
+    printk("[FTS] store CLB result OK.\n");
+    return 0;
+}
 #endif
 
 static int __init ft5306_ts_init(void)
@@ -885,6 +920,7 @@ static int __init ft5306_ts_init(void)
 		}
 	}
 
+	printk("%s chip_id=%d\n",__func__,chip_id);
 #ifdef FW_UPGRADE_ENABLE
 	msleep(10);
 	firmware_ver = fts_ctpm_get_upg_ver();	/*Get Firmware file version*/
@@ -901,13 +937,15 @@ static int __init ft5306_ts_init(void)
 		if (ret) {
 			pr_ft5306(INFO, "upgrade TP firmware failed!\n");
 		} else {
+			pr_ft5306(INFO, "upgrade TP firmware ok!\n");
+			fts_ctpm_auto_clb();
 			msleep(10);
 		}
 		/*after updata need calibrate*/
-		fts_register_write(0xfc, 4);
-		msleep(1000);
-		ft5306_i2c_read_value(this_client, 0xA6, &chip_fw_ver, 1);
+		//fts_register_write(0xfc, 4);
+		//msleep(1000);		
 		ft5306_reset_func();//cd_hwfu,TP need reset after update firmware
+		ft5306_i2c_read_value(this_client, 0xA6, &chip_fw_ver, 1);
 		pr_ft5306(INFO, "the new firmware version is %x\n", chip_fw_ver);
 	} else { 
 		pr_ft5306(INFO, "no need upgrade TP firmware!\n");

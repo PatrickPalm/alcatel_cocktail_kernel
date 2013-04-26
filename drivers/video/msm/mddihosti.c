@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2008-2010, 2012 Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -25,9 +25,6 @@
 #include "msm_fb_panel.h"
 #include "mddihost.h"
 #include "mddihosti.h"
-
-#define MDDI_CMD_HIBERNATE_NUM 1
-#define FEATURE_MDDI_DISABLE_REVERSE
 
 #define FEATURE_MDDI_UNDERRUN_RECOVERY
 #ifndef FEATURE_MDDI_DISABLE_REVERSE
@@ -78,9 +75,8 @@ boolean mddi_debug_clear_rev_data = TRUE;
 uint32 *mddi_reg_read_value_ptr;
 
 mddi_client_capability_type mddi_client_capability_pkt;
-#ifndef FEATURE_MDDI_DISABLE_REVERSE
 static boolean mddi_client_capability_request = FALSE;
-#endif
+
 #ifndef FEATURE_MDDI_DISABLE_REVERSE
 
 #define MAX_MDDI_REV_HANDLERS 2
@@ -1543,7 +1539,7 @@ static void mddi_host_initialize_registers(mddi_host_type host_idx)
 	if (pmhctl->disable_hibernation)
 		mddi_host_reg_out(CMD, MDDI_CMD_HIBERNATE);
 	else
-		mddi_host_reg_out(CMD, MDDI_CMD_HIBERNATE |MDDI_CMD_HIBERNATE_NUM);
+		mddi_host_reg_out(CMD, MDDI_CMD_HIBERNATE | 1);
 
 	/* Bring up link if display (client) requests it */
 #ifdef MDDI_HOST_DISP_LISTEN
@@ -1862,7 +1858,7 @@ uint32 mddi_get_client_id(void)
 
 		/* reenable auto-hibernate */
 		if (!pmhctl->disable_hibernation)
-			mddi_host_reg_out(CMD, MDDI_CMD_HIBERNATE | MDDI_CMD_HIBERNATE_NUM);
+			mddi_host_reg_out(CMD, MDDI_CMD_HIBERNATE | 1);
 
 		mddi_host_reg_out(DRIVE_LO, 0x0032);
 		client_detection_try = TRUE;
@@ -2277,22 +2273,16 @@ void mddi_host_disable_hibernation(boolean disable)
 	mddi_host_type host_idx = MDDI_HOST_PRIM;
 	mddi_host_cntl_type *pmhctl = &(mhctl[MDDI_HOST_PRIM]);
 
-	unsigned long flags;
-
 	if (disable) {
 		pmhctl->disable_hibernation = TRUE;
-		spin_lock_irqsave(&mddi_host_spin_lock, flags);
-		if (!MDDI_HOST_IS_HCLK_ON)
-			MDDI_HOST_ENABLE_HCLK;
-		mddi_host_reg_out(CMD, MDDI_CMD_HIBERNATE );
-		spin_unlock_irqrestore(&mddi_host_spin_lock, flags);
 		/* hibernation will be turned off by isr next time it is entered */
 	} else {
 		if (pmhctl->disable_hibernation) {
+			unsigned long flags;
 			spin_lock_irqsave(&mddi_host_spin_lock, flags);
 			if (!MDDI_HOST_IS_HCLK_ON)
 				MDDI_HOST_ENABLE_HCLK;
-			mddi_host_reg_out(CMD, MDDI_CMD_HIBERNATE | MDDI_CMD_HIBERNATE_NUM);
+			mddi_host_reg_out(CMD, MDDI_CMD_HIBERNATE | 1);
 			spin_unlock_irqrestore(&mddi_host_spin_lock, flags);
 			pmhctl->disable_hibernation = FALSE;
 		}
